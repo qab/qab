@@ -1,0 +1,67 @@
+/*Genreal styles*/
+.clear{
+    clear:both;
+}
+.hide{
+    display:none;
+}
+/* Pagina Cines */
+.view.view-Cine li{
+	float:left;
+	list-style: none;
+	width: 250px;
+}
+#cine-page .panel-region-separator{
+	clear: both;
+	height:20px;
+}
+#cine-page h2 {
+	color: #FFFFFF;
+	background: #000000;
+	text-transform: lowercase;
+	padding: 2px 0px 0px 5px;
+}
+
+#cine-page h2:first-letter{
+	color: #000000;
+	background: #ffffff;
+	margin-right: 5px;
+	font-size: 1.8em;
+	
+}
+
+/* Pagina Interna*/
+#trailers-video-box, #soundtrak-movie-box {
+	width: 425px;
+	height: 350px;
+	float: left;
+	background-color:#000000;
+}
+#pelicula-sinopsis, #soundtrak-body-box {
+	width: 475px;
+	float: left;
+	margin-left: 10px;
+}
+.trailers-list, #soundtrak-thumbs-box {
+    clear: both;
+}
+#soundtrak-thumbs-box {
+    padding-top:15px;
+}
+.trailers-list li, #soundtrack-gallery li {
+    padding: 0 10px;
+    cursor:pointer;
+}
+.jcarousel-skin-tango {
+    clear: both;
+}
+.jcarousel-skin-tango .jcarousel-container{
+    background:none;
+    border: none;
+}
+
+/*Canciones Page*/
+.view-Musica .views-row{
+    float:left;
+    width:300px;
+}

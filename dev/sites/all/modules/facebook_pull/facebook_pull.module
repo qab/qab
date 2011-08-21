@@ -1,0 +1,97 @@
+<?php
+
+
+/**
+ * Implementation of hook_init().
+ */
+function facebook_pull_init() {
+  drupal_add_css(drupal_get_path('module', 'facebook_pull') . '/facebook_pull-feed.css');
+}
+
+
+/**
+ * Implementation of hook_theme().
+ */
+function facebook_pull_theme($existing, $type, $theme, $path) {
+  $theme = array(
+    'facebook_pull_feed' => array(
+      'arguments' => array('items' => array()),
+      'template'  => 'facebook_pull-feed',
+    ),
+  );
+  return $theme;
+}
+
+
+/**
+ * Serve up a facebook feed from the cache
+ */
+function facebook_pull_render($app_id, $app_secret, $graph_id, $limit = 10) {
+  $token = _facebook_pull_accesstoken($app_id, $app_secret);
+  $data = _facebook_pull_feed_cached($graph_id, $token, $limit);
+
+  if (!$data) {
+    return '';
+  }
+
+  return theme('facebook_pull_feed', $data);
+}
+
+
+/**
+ * Pull data from a facebook feed and cache it
+ */
+function _facebook_pull_feed_cached($graph_id, $token, $limit = 10) {
+  $cache_key = sprintf("%s-%s", $graph_id, $limit);
+  $cache = cache_get($cache_key);
+
+  if (!$cache || $cache->created > time() + 1200) {    
+    $data = _facebook_pull_feed($graph_id, $token, $limit);
+    cache_set($cache_key, $data, 'cache', CACHE_TEMPORARY);
+  } else {
+    $data = $cache->data;
+  }
+
+  return $data;
+}
+
+
+/**
+ * Pull data from a facebook feed
+ */
+function _facebook_pull_feed($graph_id, $token, $limit = 10) {
+  $url = "https://graph.facebook.com/%s/feed?access_token=%s&limit=%d";
+
+  $fullurl = sprintf($url, $graph_id, $token, $limit);
+  $raw = file_get_contents($fullurl);
+  $data = json_decode($raw);
+
+  if (!isset($data->data)) {
+    $message = 'Failed to fetch data from the Facebook Graph';
+    $variables = array();
+    watchdog('facebook_pull', $message, $variables, WATCHDOG_WARNING);
+    return FALSE;
+  }
+
+  return $data->data;
+}
+
+
+/**
+ * Get an access token
+ */
+function _facebook_pull_accesstoken($app_id, $app_secret) {
+  $endpoint = 'https://graph.facebook.com/oauth/access_token?client_id=%s&client_secret=%s&grant_type=client_credentials';
+
+  $fullurl = sprintf($endpoint, $app_id, $app_secret);
+  $raw = file_get_contents($fullurl);
+
+  if (substr($raw, 0, 13) != 'access_token=') {
+    $message = 'Failed to fetch data from the Facebook Graph';
+    $variables = array();
+    watchdog('facebook_pull', $message, $variables, WATCHDOG_WARNING);
+    return FALSE;
+  }
+
+  return substr($raw, 13);
+}

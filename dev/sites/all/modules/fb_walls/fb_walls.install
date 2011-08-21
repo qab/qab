@@ -1,0 +1,64 @@
+<?php
+// $Id: fb_walls.install,v 1.1 2011/01/24 00:25:42 manuelbs Exp $
+// @file this is the installation file for the module fb_walls. All DB Tables are created here
+
+/**
+ * Implements hook_install()
+ */
+function fb_walls_install() {
+  drupal_install_schema('fb_walls');
+}
+
+/**
+ * Implements hook_uninstall()
+ */
+function fb_walls_uninstall() {
+  drupal_uninstall_schema('fb_walls');
+}
+
+/**
+* Implements hook_schema()
+*/
+function fb_walls_schema() {
+  $schema['fb_walls'] = array(
+    'fields' => array(
+      'wid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'fbid' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'showguestentries' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'showcomments' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'maxentries' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'timeconversion' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('wid'),
+  );
+  
+  return $schema;
+}

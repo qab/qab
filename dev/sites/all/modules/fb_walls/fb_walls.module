@@ -1,0 +1,626 @@
+<?php
+/**
+* Implements hook_menu()
+*/
+function fb_walls_menu() {
+  $items['admin/settings/fb_walls'] = array(
+    'title' => t('Facebook Walls'),
+    'description' => t('Create new FB Wall Blocks'),
+    'page callback' => 'fb_walls_adminsettings',
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $items['fb_wall/add'] = array(
+    'page callback' => 'fb_walls_wall_add',
+    'page arguments' => array('fb_walls_adminsettings'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  return $items;
+}
+
+/**
+* Implements hook_block
+*/
+function fb_walls_block($op='list', $delta=0, $edit=array()) {
+  $walls = _fb_walls_get_walls();
+  switch ($op) {
+    case 'list':
+      foreach ($walls as $wall) {      
+        $blocks[$wall['wid']]['info'] = t('FB Wall: !fbid', array('!fbid' => $wall['fbid']));
+      }
+      return $blocks;
+    case 'view':      
+        _fb_walls_add_wall_scripts();
+        $wall = _fb_walls_get_wall($delta);
+        $wallCode = _fb_walls_get_wall_code($wall);
+
+        $block['subject'] = FALSE;
+        $block['content'] = $wallCode;
+        
+        return $block;
+  }
+}
+
+/**
+* Adminsettings page to administer facebook wall
+*/
+function fb_walls_adminsettings() {
+  $form = drupal_get_form( 'fb_walls_adminsettings_form' );
+  
+  return $form;
+}
+
+/**
+* Add CSS and JS Files needed for displaying the wall
+*/
+function _fb_walls_add_wall_scripts() {
+  drupal_add_js(drupal_get_path('module', 'fb_walls') . '/fb_walls.js');
+  drupal_add_css(drupal_get_path('module', 'fb_walls') . '/fb_walls.css');
+  
+  drupal_add_js(drupal_get_path('module', 'fb_walls') . '/js_plugin/jquery.neosmart.fb.wall.js');
+  drupal_add_css(drupal_get_path('module', 'fb_walls') . '/js_plugin/jquery.neosmart.fb.wall.css');
+}
+
+/**
+* Adminsettings form to administer facebook wall
+*/
+function fb_walls_adminsettings_form($form_state) {
+  $form = array();
+
+  $walls = _fb_walls_get_walls();
+  
+  $form = array();
+  $form['#tree'] = TRUE;
+
+  $form['description'] = array(
+    '#type' => 'item',
+    '#value' => t('Each wall configuration in this form will create a new block that shows your facebook wall.'),
+  );
+  
+  $form['walls_wrapper'] = array(
+      '#type' => 'item',
+      '#weight' => -15,
+      '#prefix' => '<div class="walls_wrapper" id="walls_form_wrapper"><!--formwrapper-->',
+      '#suffix' => '</div><!--/formwrapper-->',
+  );
+  
+  
+  
+  foreach ($walls as $wid => $wall) {
+    $form['walls_wrapper']['wall'][$wall['wid']] = _fb_walls_wall_form($wall, $form_state);
+  }
+  
+  // AHAH-enabled buttons with the id to add more walls
+  $form['add_wall'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add wall'),
+    '#weight' => 1,
+    '#ahah' => array(
+      'path' => 'fb_wall/add',
+      'wrapper' => 'walls_form_wrapper',
+      'method' => 'append',
+    ),
+  );
+  
+  $form['submit_button'] = array(
+    '#type' => 'submit',
+    '#value' => 'submit',
+    '#weight' => 10,
+  );
+  
+  
+  return $form;
+}
+
+/**
+* Validation function for adminsettings form
+*/
+function fb_walls_adminsettings_form_validate($form, &$form_state) {
+  $values = $form_state['values'];
+  $walls = $values['walls_wrapper']['wall'];
+
+  if (!is_array($walls))
+    return TRUE;
+  
+  foreach ($walls as $wid => $wall) {
+    $wallConfig = $wall['wallconfig'];
+    $fbid = $wallConfig['fbid'];
+    $maxentries = $wallConfig['maxentries'];
+    $showguestentries = $wallConfig['showguestentries'];
+    $showcomments = $wallConfig['showcomments'];
+    $timeconversion = $wallConfig['timeconversion'];
+    $delete = $wallConfig['delete'];
+    
+    //if no value is set, ignore it!
+    if (!$fbid && !$maxentries && !$showguestentries && !$showcomments && !$timeconversion)
+      continue;
+    
+    if ($delete)
+      continue;
+    
+    if (($maxentries) && !is_numeric($maxentries))
+      form_set_error("walls_wrapper][wall][$wid][wallconfig][maxentries", t('Please enter only numeric values.'));
+      
+    if (!$fbid)
+      form_set_error("walls_wrapper][wall][$wid][wallconfig][fbid", t('Please enter the facebook id of the wall.'));
+  }
+}
+
+/**
+* Submit handler function for adminsettings form
+*/
+function fb_walls_adminsettings_form_submit($form, &$form_state) {
+  $values = $form_state['values'];
+  $walls = $values['walls_wrapper']['wall'];
+
+  if (!is_array($walls))
+    return;
+
+  foreach ($walls as $wid => $wall) {
+    if ($wall['isnew']) {
+      unset($wall['wid']);
+    }
+    
+    $wallConfig = $wall['wallconfig'];
+    $fbid = $wallConfig['fbid'];
+    $maxentries = $wallConfig['maxentries'];
+    $delete = $wallConfig['delete'];
+    $showguestentries = $wallConfig['showguestentries'];
+    $showcomments = $wallConfig['showcomments'];
+    $timeconversion = $wallConfig['timeconversion'];
+
+    $wall = array(
+      'wid' => $wallConfig['wid'],
+      'delete' => $wallConfig['delete'],
+      'showguestentries' => $wallConfig['showguestentries'],
+      'fbid' => $wallConfig['fbid'],
+      'showcomments' => $wallConfig['showcomments'],
+      'maxentries' => $wallConfig['maxentries'],
+      'timeconversion' => $wallConfig['timeconversion'],
+    );
+   
+    if (!$fbid && !$maxentries && !$showguestentries && !$showcomments && !$timeconversion)
+      continue;
+
+    if ($delete)
+      _fb_walls_delete_wall($wall);
+    else
+      _fb_walls_save_wall($wall);
+  }
+  
+}
+
+/**
+* delete a wall!
+*/
+function _fb_walls_delete_wall($wall) {
+  db_query('DELETE FROM {fb_walls} WHERE wid=%d', $wall['wid']);
+}
+
+/**
+* Save a wall!
+*/
+function _fb_walls_save_wall($wall) {  
+  if ($wall['wid'])
+    db_query('UPDATE {fb_walls} SET fbid="%s", showguestentries=%d, showcomments=%d, maxentries=%d, timeconversion=%d WHERE wid=%d',
+      $wall['fbid'],
+      $wall['showguestentries'],
+      $wall['showcomments'],
+      $wall['maxentries'],
+      $wall['timeconversion'],
+      $wall['wid']
+    );
+  else
+    db_query('INSERT INTO {fb_walls} SET fbid="%s", showguestentries=%d, showcomments=%d, maxentries=%d, timeconversion=%d',
+      $wall['fbid'],
+      $wall['showguestentries'],
+      $wall['showcomments'],
+      $wall['maxentries'],
+      $wall['timeconversion']
+    );
+}
+
+/**
+* Callback to add a new form for a new wall
+*/
+function fb_walls_wall_add() {
+  $form = _fb_walls_wall_form(array(), array());  //uniqueID so it will be unique in the array of the form!
+  _fb_walls_ahah_get_form($form, uniqid());
+}
+
+function _fb_walls_ahah_get_form($form_element, $wid) {
+
+  // Build the new form.
+  $form_element['isnew'] = array(
+    '#type' => 'value',
+    '#value' => 1,
+  );
+  
+  $form_state = array('submitted' => FALSE);
+  $form_build_id = $_POST['form_build_id'];
+  $form = form_get_cache($form_build_id, $form_state);
+  $form['walls_wrapper']['wall'][$wid] = $form_element;
+  form_set_cache($form_build_id, $form, $form_state);
+  
+  // Rebuild the form.		
+  $form = form_builder('fb_walls_adminsettings_form', $form, $form_state);
+  
+  // Render the new output.  
+  $wall_form = $form['walls_wrapper']['wall'][$wid];
+  //unset($wall_form['buttons']);
+  
+  $wall_form[$wid]['#attributes']['class'] = empty($wall_form[$wid]['#attributes']['class']) ? 'ahah-new-content' : $wall_form[$wid]['#attributes']['class'] .' ahah-new-content';
+  $output = theme('status_messages') . drupal_render($wall_form);
+  
+  drupal_json(array('status' => TRUE, 'data' => $output));
+}
+
+
+/**
+* Return all walls
+*/
+function _fb_walls_get_walls($uid=FALSE) {
+  $res = db_query('SELECT * FROM {fb_walls}');
+  
+  $walls = array();
+  
+  while ($wall = db_fetch_array($res)) {
+    $walls[$wall['wid']] = $wall;
+  }
+  
+  return $walls;
+}
+
+/**
+* Return code of a wall
+*/
+function _fb_walls_get_wall_code($wall) {
+  if (is_numeric($wall))
+    $wall = _fb_walls_get_wall($wall);
+   
+  $fbid = $wall['fbid'];
+  $wid = $wall['wid'];
+  $guestEntries = $wall['showguestentries'] ? 'true' : 'false';  
+  $showComments = $wall['showcomments'] ? 'true' : 'false';  
+  $maxEntries = $wall['maxentries'];  
+  $timeConversion = $wall['timeconversion']; 
+  
+  $code = "<div id='wall_$wid' class='fb-wall'>
+          <span class='fbid'>$fbid</span>
+          <span class='wid'>$wid</span>
+          <span class='guestEntries'>$guestEntries</span>
+          <span class='showComments'>$showComments</span>
+          <span class='maxEntries'>$maxEntries</span>
+          <span class='timeConversion'>$timeConversion</span>
+          </div>";
+
+  return $code;
+}
+
+/**
+* Get wall data by wid
+*/
+function _fb_walls_get_wall($wid) {
+  $res = db_query('SELECT * FROM {fb_walls} WHERE wid=%d', $wid);
+  return db_fetch_array($res);
+}
+
+/**
+*  Returns some configuration defaults
+*/
+function _fb_walls_defaults() {
+  return array(   
+    'maxentries' => "5",
+    'showcomments' => TRUE,
+    'showguestentries' => TRUE,
+    'timeconversion' => "24",
+  );
+}
+
+/**
+* Return a single wall form, calld as ahah result for eaxmple
+*/
+function _fb_walls_wall_form($wall, $form_state) {
+  $form = array();
+  
+  $defaults = _fb_walls_defaults();
+
+  $form['wallconfig']  = array(
+    '#type' => 'fieldset',
+    '#title' => t("Single wall configuration"),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  $form['wallconfig']['wid'] = array(
+    '#type' => 'value',
+    '#value' => $wall['wid'],
+  );
+
+  $form['wallconfig']['delete'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('delete this wall on submit'),
+    '#weight' => 1,
+    '#default_value' => 0,
+  );
+  
+  $form['wallconfig']['fbid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Facebook Wall'),
+    '#weight' => 1,
+    '#default_value' => $wall['fbid'],
+  );
+  
+  $form['wallconfig']['showguestentries'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show guest entries'),
+    '#weight' => 1,
+    '#default_value' => $wall['showguestentries'] ? $wall['showguestentries'] : $defaults['showguestentries'],
+  );
+  
+  $form['wallconfig']['showcomments'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show comments'),
+    '#weight' => 1,
+    '#default_value' => $wall['showcomments'] ? $wall['showcomments'] : $defaults['showcomments'],
+  );
+  
+  $form['wallconfig']['maxentries'] = array(
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#title' => t('Max entries'),
+    '#weight' => 1,
+    '#default_value' => $wall['maxentries'] ? $wall['maxentries'] : $defaults['maxentries'],
+  );
+  
+  $form['wallconfig']['timeconversion'] = array(
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#title' => t('Time conversion'),
+    '#weight' => 1,
+    '#default_value' => $wall['timeconversion'] ? $wall['timeconversion'] : $defaults['timeconversion'],
+  );
+  
+
+  return $form;
+}
+
+/**#####################################
+* CCK Integration
+*#######################################
+*/
+
+/**
+* Implements hook_field_info()
+*/
+function fb_walls_field_info() {
+  return array(
+    'fb_wall_field' => array(
+      'label' => 'FB Wall Field',
+      'callbacks' => array(
+        'tables' => CONTENT_CALLBACK_DEFAULT,
+        'arguments' => CONTENT_CALLBACK_DEFAULT,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function fb_walls_theme() {
+  return array(
+    'fb_wall_field' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'fb_walls_formatter_default' => array(
+      'arguments' => array('element' => NULL),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_settings().
+ */
+function fb_walls_field_settings($op, $field) {
+  switch ($op) {
+  case 'database columns':
+    $columns = array(
+      'fbid' => array('type' => 'varchar', 'length' => 255, 'not null' => FALSE, 'sortable' => TRUE),
+      'showguestentries' => array('type' => 'int', 'not null' => FALSE, 'sortable' => FALSE),
+      'showcomments' => array('type' => 'int', 'not null' => FALSE, 'sortable' => FALSE),
+      'maxentries' => array('type' => 'int', 'not null' => FALSE, 'sortable' => FALSE),
+      'timeconversion' => array('type' => 'int', 'not null' => FALSE, 'sortable' => FALSE),
+    );
+    return $columns;
+  }
+}
+
+/**
+ * Implementats hook_field().
+ */
+function fb_walls_field($op, &$node, $field, &$items, $teaser, $page) {
+  switch ($op) {
+    case 'validate':
+      if (is_array($items)) {
+        foreach ($items as $delta => $item) {
+            //VALIDATION OF FIELD CONTENT
+          if ($item['count'] && (!is_numeric($item['count']) || ($item['count']==0)) )
+            form_set_error($field['field_name'] . "][$delta][count", t('Please enter a number > 0'));
+          
+          if ($item['model'] && !_vehiclefield_validateModel($item)) {
+            form_set_error($field['field_name'] . "][$delta][model", t('This Model does not belong to Manufacturer or is invalid model!'));
+          }
+        } 
+     }
+     break;
+
+    case 'sanitize':
+      foreach ($items as $delta => $item) {
+        $items[$delta]['safe']['fbid'] = check_plain($item['fbid']);
+        $showguestentries = check_plain($item['showguestentries']);
+        $items[$delta]['safe']['showguestentries'] = $showguestentries;
+        $showcomments = check_plain($item['showcomments']);
+        $items[$delta]['safe']['showcomments'] = $showcomments;
+        $maxentries = check_plain($item['maxentries']);
+        $items[$delta]['safe']['maxentries'] = $maxentries;
+        $timeconversion = check_plain($item['timeconversion']);
+        $items[$delta]['safe']['timeconversion'] = $timeconversion;
+      }
+      break;
+  }
+}
+
+/**
+ * Implements hook_content_is_empty().
+ */
+function fb_walls_content_is_empty($item, $field) {
+  if (!$item['fbid']) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implementation of hook_field_formatter_info().
+ *
+ */
+function fb_walls_field_formatter_info() {
+  $formats = array(
+    'default' => array(
+      'label' => t('Default FB Wall field'),
+      'field types' => array('fb_wall_field'),
+      'multiple values' => CONTENT_HANDLE_CORE,
+    ),
+ );
+
+  return $formats;
+}
+
+/**
+ * Theme function for 'default' fb_wall field formatter.
+ */
+function theme_fb_walls_formatter_default($element) {
+  if (!$element['#item']['fbid'])
+    return;
+    
+  //Add Scripts
+  _fb_walls_add_wall_scripts();
+       
+  //build the paramters of the wall     
+  $wall['fbid'] = $element['#item']['fbid'];
+  $wall['showguestentries'] = $element['#item']['showguestentries'];
+  $wall['showcomments'] = $element['#item']['showcomments'];
+  $wall['maxentries'] = $element['#item']['maxentries'];
+  $wall['timeconversion'] = $element['#item']['timeconversion'];
+  $wall['wid'] = $element['#type_name'] . "_" . $element['#field_name'] . "_" . $element['#item']['#delta'];
+
+  
+  //get the wall JS code
+  $wallCode = _fb_walls_get_wall_code($wall);  
+ 
+  return $wallCode;
+}
+
+
+
+/**
+ * Implementats hook_widget_info().
+ */
+function fb_walls_widget_info() {
+  return array(
+    'fb_wall_field' => array(
+      'label' => t('FB Wall field'),
+      'field types' => array('fb_wall_field'),
+      'multiple values' => CONTENT_HANDLE_CORE,
+      'callbacks' => array(
+        'default value' => CONTENT_CALLBACK_DEFAULT,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements FAPI hook_elements().
+ */
+function fb_walls_elements() {
+  $elements['fb_wall_field']['#columns'] = array('fbid', 'showguestentries', 'showcomments', 'maxentries', 'timeconversion');
+  $elements['fb_wall_field']['#input'][] = TRUE;
+  $elements['fb_wall_field']['#process'][] = 'fb_walls_field_process';
+  return $elements;
+}
+
+
+/**
+ * Implementation of hook_widget().
+ */
+function fb_walls_widget(&$form, &$form_state, $field, $items, $delta = 0) {
+  $element = array(
+    '#type' => $field['widget']['type'],
+    '#default_value' => isset($items[$delta]) ? $items[$delta] : '',
+  );
+
+  return $element;
+}
+
+/**
+ * Process an individual element.
+ */
+function fb_walls_field_process($element, $edit, $form_state, $form) {
+  $element['fbid'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Facebook ID"),
+    '#required' => $element['#required'],
+    '#size' => 6,
+    '#default_value' => $element['#value']['fbid'],
+    '#description' => t('Enter the ID of your Facebook page, app or profile'),
+  );
+
+  $element['showguestentries'] = array(
+    '#type' => 'checkbox',
+    '#title' => t("Show guest entries"),
+    '#required' => $element['#required'],
+    '#size' => 7,
+    '#default_value' => $element['#value']['showguestentries'],
+    '#description' => t('If this value is set to false, only entries from the owner of the Wall will be displayed.'),
+  );
+  
+  $element['showcomments'] = array(
+    '#type' => 'checkbox',
+    '#title' => t("Show comments"),
+    '#required' => $element['#required'],
+    '#size' => 7,
+    '#default_value' => $element['#value']['showcomments'],
+    '#description' => t('The comments are displayed by default but can be turned off with this value.'),
+  );
+  
+  $element['maxentries'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Max entries"),
+    '#required' => $element['#required'],
+    '#size' => 7,
+    '#default_value' => $element['#value']['maxentries'],
+    '#description' => t('The maximum number of entries that appear.'),
+  );
+  
+  $element['timeconversion'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Time conversion"),
+    '#required' => $element['#required'],
+    '#size' => 7,
+    '#default_value' => $element['#value']['timeconversion'],
+    '#description' => t('Possible values are "12" (12-hour-clock) and "24" (24-hour-clock).'),
+  );
+  
+  return $element;
+}
+
+/**
+ * FAPI theme for an individual text elements.
+ */
+function theme_fb_wall_field($element) {
+  return $element['#children'];
+}

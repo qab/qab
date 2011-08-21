@@ -1,0 +1,6 @@
+name = Views Slideshow: RoundAbout
+description = Roundabout
+dependencies[] = views_slideshow
+package = Views
+core = 6.x
+

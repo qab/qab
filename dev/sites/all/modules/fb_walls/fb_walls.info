@@ -1,0 +1,11 @@
+name = 'Facebook Walls'
+description = 'Displays Facebook walls in blocks'
+core = 6.x
+php = 5.1
+package = BrightSolutions
+; Information added by drupal.org packaging script on January 1, 1970 - 00:00
+version = "6.x-1.4"
+core = "6.x"
+project = "fb_walls"
+datestamp = "1296601624"
+

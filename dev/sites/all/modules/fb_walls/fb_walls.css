@@ -1,0 +1,8 @@
+  .fb-wall span.fbid,
+  .fb-wall span.wid,
+  .fb-wall span.guestEntries,
+  .fb-wall span.showComments,
+  .fb-wall span.maxEntries,
+  .fb-wall span.timeConversion {
+    display: none;
+  }
